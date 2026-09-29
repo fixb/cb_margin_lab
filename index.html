@@ -22,6 +22,7 @@ html{background:#0f1216}
 @media (prefers-color-scheme:light){:root:not([data-theme="dark"]){--bg:#f4f3ef;--panel:#ffffff;--panel2:#f0eee8;--line:#d9d6cd;--fg:#1b1f25;--muted:#5d6672;--accent:#a8721a;--accent2:#1f6f9c;--good:#25864f;--warn:#b85a1f;--bad:#b23a36;--hedged:#1f6f9c;--unhedged:#a8721a;--prem:#b23a36;color-scheme:light}}
 :root[data-theme="light"]{--bg:#f4f3ef;--panel:#ffffff;--panel2:#f0eee8;--line:#d9d6cd;--fg:#1b1f25;--muted:#5d6672;--accent:#a8721a;--accent2:#1f6f9c;--good:#25864f;--warn:#b85a1f;--bad:#b23a36;--hedged:#1f6f9c;--unhedged:#a8721a;--prem:#b23a36;color-scheme:light}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:14px;line-height:1.45;margin:0;padding-block:20px 60px;padding-inline:clamp(16px,3vw,40px)}
 h1,h2,h3{margin:0;text-wrap:balance;font-weight:500}
 h1{font-family:var(--font-display);font-size:clamp(26px,3.5vw,36px);letter-spacing:-.01em}
@@ -61,7 +62,11 @@ label.f .num{color:var(--fg)}
 .stack span{display:block;height:100%}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
-.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px}
+.grid2.wide{grid-template-columns:repeat(auto-fit,minmax(min(100%,540px),1fr))}
+#tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (min-width:560px){#tiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (min-width:1000px){#tiles{grid-template-columns:repeat(6,minmax(0,1fr))}}
 .tbl{overflow-x:auto}
 table{border-collapse:collapse;width:100%;font-size:13px}
 th,td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -98,6 +103,8 @@ details summary{cursor:pointer;color:var(--muted);font-size:13px}
 .ex{font-family:var(--font-mono);font-size:12.5px;white-space:pre;overflow-x:auto;background:var(--panel2);padding:10px 12px;border-radius:4px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 @media (max-width:520px){.tile .v{font-size:20px}}
+/* Touch: 16px fields stop iOS Safari zooming on focus; taller hit targets. */
+@media (pointer:coarse){button,select,input[type=text],input[type=number],input[type=date]{font-size:16px;min-height:40px}input[type=number]{width:80px}}
 </style>
 </head>
 <body>
@@ -148,7 +155,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:13px}
 
 <section>
   <h2>Ventilations</h2>
-  <div class="grid2">
+  <div class="grid2 wide">
     <div class="panel"><h3>Par région</h3><div class="tbl" id="byRegion"></div></div>
     <div class="panel"><h3>Par bucket de delta</h3><div class="tbl" id="byDelta"></div></div>
     <div class="panel"><h3>Par secteur (top 12 MCap)</h3><div class="tbl" id="bySector"></div></div>
