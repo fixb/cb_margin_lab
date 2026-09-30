@@ -177,6 +177,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:13px}
   <h2>Papiers · marge implicite nom par nom</h2>
   <div class="panel">
     <div class="names-tools">
+      <select id="fGrp"><option value="line">Par ligne</option><option value="iss">Par émetteur</option></select>
       <input type="text" id="q" placeholder="Filtrer : nom, ISIN, secteur…" style="flex:1 1 200px;min-width:0">
       <select id="fReg"><option value="">Toutes régions</option></select>
       <select id="fBk"><option value="">Tous deltas</option><option value="<30">δ &lt; 30</option><option value="30-60">δ 30–60</option><option value="60-80">δ 60–80</option><option value=">80">δ &gt; 80</option></select>
@@ -184,7 +185,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:13px}
       <span class="note" id="nCount"></span>
     </div>
     <div class="names-wrap tbl"><table id="names"></table></div>
-    <p class="note" style="margin-top:8px">Vert : levier max ≥ 12x (δ élevé, prime faible). Rouge : levier max ≤ 4x (busted, tout en prime). Clic sur un en‑tête pour trier. La colonne « Loan » est le financement PB implicite par nom (MV × part HF × (1 − marge)).</p>
+    <p class="note" style="margin-top:8px">Vert : levier max ≥ 12x (δ élevé, prime faible). Rouge : levier max ≤ 4x (busted, tout en prime). Clic sur un en‑tête pour trier. Vue par émetteur : lignes regroupées par nom normalisé (sous‑jacent pour les exchangeables, ex. Samsung(Citi) et Samsung(GS) → Samsung ; classes `A`/`B`, $ retirés) et par code émetteur CUSIP pour les ISIN US/CA quand le nom commence pareil (Nebius / Nebius Group), agrégats pondérés MCap ; touchez un émetteur pour voir ses lignes. La colonne « Loan » est le financement PB implicite par nom (MV × part HF × (1 − marge)).</p>
   </div>
 </section>
 
@@ -332,7 +333,7 @@ let TOT=1, ROWS=[];
 function render(){
   const s=sets[cur]; if(!s){ return; }
   const prm=params();
-  ROWS=compute(s.rows,prm); const A=agg(ROWS); TOT=A.mcap;
+  ROWS=compute(s.rows,prm); const A=agg(ROWS); TOT=A.mcap; ISS=issuerMap(ROWS);
   $('#sumTitle').textContent=`${s.index} · ${s.date} · ${s.name}`;
   $('#tiles').innerHTML=[
     tile('Univers',`${A.n} <span style="font-size:14px;color:var(--muted)">noms</span>`,`MCap ${fmt(A.mcap/1e3,0)} $bn`),
@@ -354,16 +355,43 @@ function render(){
   const regs=[...new Set(ROWS.map(r=>r.region))].sort(); const fr=$('#fReg'); const cv=fr.value; fr.innerHTML='<option value="">Toutes régions</option>'+regs.map(r=>`<option${r===cv?' selected':''}>${r}</option>`).join('');
   renderNames(); renderStress(); renderTS();
 }
+// ---------- issuer grouping ----------
+// FTSE names: "Underlying(Issuer)" for exchangeables, share-class / preferred suffixes (`A`, $, L, H).
+function normName(n){ return n.replace(/\(.*?\)/g,' ').replace(/`[A-Z]`/g,' ').replace(/\s+/g,' ').trim().replace(/\s+\$$/,'').replace(/\s+L$/,'').replace(/\s+[A-Z]$/,'').trim(); }
+let ISS=new Map();   // normName -> issuer label
+// Merge US/CA lines sharing a CUSIP issuer code only when the names start alike (Liberty tracking stocks share one CUSIP).
+function issuerMap(rows){
+  const par={}, f=k=>par[k]===k?k:(par[k]=f(par[k])), byCusip={};
+  rows.forEach(r=>{ const k=normName(r.issue); par[k]??=k;
+    const m=/^(?:US|CA)([0-9A-Z]{6})/.exec(r.isin); if(m){ const c=m[1]+'|'+k.split(' ')[0].toLowerCase(); if(byCusip[c]){ const a=f(byCusip[c]),b=f(k); if(a!==b) par[b]=a; } else byCusip[c]=k; } });
+  const label={}; Object.keys(par).forEach(k=>{ const r=f(k); if(!label[r]||k.length<label[r].length) label[r]=k; });
+  return new Map(Object.keys(par).map(k=>[k,label[f(k)]]));
+}
+function byIssuer(rows){
+  const g={}; rows.forEach(r=>(g[ISS.get(normName(r.issue))]??=[]).push(r));
+  return Object.entries(g).map(([k,v])=>{ const A=agg(v), top=v.reduce((a,b)=>b.mcap>a.mcap?b:a);
+    return {issue:k,n:v.length,isin:v.map(x=>x.isin).join(' · '),region:top.region,sector:top.sector,delta:100*A.delta,prem:A.prem,mcap:A.mcap,mh:A.mh,mu:A.mu,mp:A.mp,m:A.m,lev:A.lev,loan:A.loan}; });
+}
+const COLS_ISS=[['issue','Émetteur','t'],['n','Lignes'],['region','Rég.','t'],['sector','Secteur','t'],['delta','δ'],['prem','Prime %'],['mcap','MCap $m'],['mh','Hedg.'],['mu','Non h.'],['mp','Prime'],['m','Marge'],['lev','Lev. max'],['loan','Loan $m']];
 const COLS=[['issue','Nom','t'],['region','Rég.','t'],['sector','Secteur','t'],['price','Prix'],['parity','Parité'],['prem','Prime %'],['delta','δ'],['mcap','MCap $m'],['mh','Hedg.'],['mu','Non h.'],['mp','Prime'],['m','Marge'],['lev','Lev. max'],['loan','Loan $m']];
 function renderNames(){
   const q=$('#q').value.toLowerCase(), reg=$('#fReg').value, bk=$('#fBk').value, view=$('#fView').value;
-  let rows=ROWS.filter(r=>(!q||(r.issue+' '+r.isin+' '+r.sector).toLowerCase().includes(q))&&(!reg||r.region===reg)&&(!bk||r.bk===bk));
+  const iss=$('#fGrp').value==='iss', cols=iss?COLS_ISS:COLS;
+  let rows=ROWS.filter(r=>(!q||(r.issue+' '+ISS.get(normName(r.issue))+' '+r.isin+' '+r.sector).toLowerCase().includes(q))&&(!reg||r.region===reg)&&(!bk||r.bk===bk));
+  const nLines=rows.length;
+  if(iss) rows=byIssuer(rows);
+  if(!cols.some(c=>c[0]===sortKey)){ sortKey='mcap'; sortDir=-1; }
   if(view==='top') rows=[...rows].sort((a,b)=>a.m-b.m).slice(0,25);
   else if(view==='bottom') rows=[...rows].sort((a,b)=>b.m-a.m).slice(0,25);
   else if(view==='big') rows=[...rows].sort((a,b)=>b.mcap-a.mcap).slice(0,50);
   rows.sort((a,b)=>{const x=a[sortKey],y=b[sortKey]; return (typeof x==='string'? x.localeCompare(y) : x-y)*sortDir;});
-  $('#nCount').textContent=`${rows.length} noms`;
+  $('#nCount').textContent=iss?`${rows.length} émetteurs · ${nLines} lignes`:`${rows.length} noms`;
   const maxLev=Math.min(35,Math.max(...rows.map(r=>r.lev),1));
+  const trCls=r=>r.lev>=12?'hi':r.lev<=4?'lo':'';
+  if(iss){
+    $('#names').innerHTML=`<thead><tr>${cols.map(c=>`<th data-k="${c[0]}" class="${c[0]===sortKey?'on':''}">${c[1]}${c[0]===sortKey?(sortDir>0?' ↑':' ↓'):''}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr class="${trCls(r)}" data-iss="${r.issue.replace(/"/g,'&quot;')}" style="cursor:pointer"><td class="t" title="${r.isin}">${r.issue}</td><td>${r.n}</td><td class="t">${r.region}</td><td class="t">${r.sector}</td><td>${fmt(r.delta,0)}</td><td>${fmt(r.prem,1)}</td><td>${fmt(r.mcap,0)}</td><td>${fmt(100*r.mh,1)}</td><td>${fmt(100*r.mu,1)}</td><td>${fmt(100*r.mp,1)}</td><td>${pct(r.m,1)}</td><td><span class="bar" style="width:${60*Math.min(r.lev,35)/maxLev}px"></span> ${fmt(r.lev,1)}x</td><td>${fmt(r.loan,0)}</td></tr>`).join('')}</tbody>`;
+    $('#names').querySelectorAll('tr[data-iss]').forEach(tr=>tr.onclick=()=>{ $('#fGrp').value='line'; $('#q').value=tr.dataset.iss; renderNames(); });
+  } else
   $('#names').innerHTML=`<thead><tr>${COLS.map(c=>`<th data-k="${c[0]}" class="${c[0]===sortKey?'on':''}">${c[1]}${c[0]===sortKey?(sortDir>0?' ↑':' ↓'):''}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr class="${r.lev>=12?'hi':r.lev<=4?'lo':''}"><td class="t" title="${r.isin}">${r.issue}</td><td class="t">${r.region}</td><td class="t">${r.sector}</td><td>${fmt(r.price,2)}</td><td>${fmt(r.parity,2)}</td><td>${fmt(r.prem,1)}</td><td>${fmt(r.delta,0)}</td><td>${fmt(r.mcap,0)}</td><td>${fmt(100*r.mh,1)}</td><td>${fmt(100*r.mu,1)}</td><td>${fmt(100*r.mp,1)}</td><td>${pct(r.m,1)}</td><td><span class="bar" style="width:${60*Math.min(r.lev,35)/maxLev}px"></span> ${fmt(r.lev,1)}x</td><td>${fmt(r.loan,0)}</td></tr>`).join('')}</tbody>`;
   $('#names').querySelectorAll('th').forEach(th=>th.onclick=()=>{const k=th.dataset.k; if(sortKey===k) sortDir*=-1; else {sortKey=k; sortDir=(k==='issue'||k==='region'||k==='sector')?1:-1;} renderNames();});
 }
@@ -463,7 +491,7 @@ $('#btnPick').onclick=()=>$('#file').click(); drop.onclick=()=>$('#file').click(
 $('#file').onchange=e=>{ ingest([...e.target.files]); e.target.value=''; };
 $('#btnClear').onclick=()=>{ sets=[SEED]; cur=0; save(); $('#status').textContent='Jeux chargés retirés ; jeu d\'exemple du 29/09/2026 conservé.'; renderDates(); render(); };
 ['#pH','#pU','#pP','#pHF'].forEach(s=>$(s).addEventListener('input',render));
-['#q','#fReg','#fBk','#fView'].forEach(s=>$(s).addEventListener('input',renderNames));
+['#q','#fReg','#fBk','#fView','#fGrp'].forEach(s=>$(s).addEventListener('input',renderNames));
 ['#shock','#cshock','#gridK','#fLev','#sDur'].forEach(x=>$(x).addEventListener('input',()=>{renderStress();renderTS();}));
 
 sets=load()||[SEED]; if(!sets.some(s=>s.date===SEED.date)) sets.push(SEED); sets.sort((a,b)=>a.date.localeCompare(b.date)); cur=sets.length-1;
