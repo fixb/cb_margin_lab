@@ -64,9 +64,19 @@ label.f .num{color:var(--fg)}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px}
 .grid2.wide{grid-template-columns:repeat(auto-fit,minmax(min(100%,540px),1fr))}
-#tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
-@media (min-width:560px){#tiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media (min-width:1000px){#tiles{grid-template-columns:repeat(6,minmax(0,1fr))}}
+#tiles,#stressTiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (min-width:560px){#tiles,#stressTiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (min-width:1000px){#tiles,#stressTiles{grid-template-columns:repeat(6,minmax(0,1fr))}}
+.ctl{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:14px 20px;align-items:end}
+.ctl .num{color:var(--fg);font-size:13px}
+.mx td{text-align:center;cursor:pointer;line-height:1.2}
+.mx td:first-child{text-align:left;cursor:default}
+.mx td .s{display:block;font-size:10.5px;color:var(--muted)}
+.mx td.ok{background:color-mix(in srgb,var(--good) 12%,transparent)}
+.mx td.call{background:color-mix(in srgb,var(--warn) 16%,transparent)}
+.mx td.wipe{background:color-mix(in srgb,var(--bad) 22%,transparent)}
+.mx td.cur{outline:2px solid var(--accent2);outline-offset:-2px}
+.warn{color:var(--warn)}
 .tbl{overflow-x:auto}
 table{border-collapse:collapse;width:100%;font-size:13px}
 th,td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -191,13 +201,26 @@ details summary{cursor:pointer;color:var(--muted);font-size:13px}
 </section>
 
 <section>
-  <h2>Stress : choc actions</h2>
+  <h2>Stress : impact d'un choc actions / crédit sur le levier</h2>
   <div class="panel">
-    <div class="row">
-      <div class="grow"><input type="range" id="shock" min="-40" max="20" step="5" value="-20"><div class="note">Choc sur les sous‑jacents : <span class="num" id="shockV">−20 %</span>. Parité choquée linéairement, delta ajusté par le gamma du fichier, prix CB par delta moyen, plancher à 50 % du prix initial.</div></div>
-      <div class="tiles" style="flex:2 1 380px" id="stressTiles"></div>
+    <div class="ctl">
+      <label class="f">Choc actions (sous‑jacents) <input type="range" id="shock" min="-40" max="20" step="5" value="-20"><span class="num" id="shockV">−20 %</span></label>
+      <label class="f">Choc crédit (élargissement de spread) <input type="range" id="cshock" min="0" max="1000" step="50" value="250"><span class="num" id="cshockV">+250 bp</span></label>
+      <label class="f">Élargissement de la grille de haircuts <input type="range" id="gridK" min="1" max="3" step="0.25" value="1"><span class="num" id="gridKV">×1,00</span></label>
+      <div class="row" style="gap:8px">
+        <label class="f">Levier du fonds <input type="number" id="fLev" value="5" step="0.5" min="1" max="30"><span class="note">x (MV / NAV)</span></label>
+        <label class="f">Duration spread <input type="number" id="sDur" value="3" step="0.5" min="0" max="10"><span class="note">années</span></label>
+      </div>
     </div>
-    <p class="note" style="margin-top:10px">Ce stress ne fait varier que la composition (delta / prime). Il n'intègre pas la révision de la grille elle‑même, qui est le vrai mécanisme de crise : Mitchell &amp; Pulvino documentent des haircuts sur CB hedgées illiquides passés de 10–15 % à 50–75 % à l'automne 2008.</p>
+    <div class="note warn" id="stressWarn" style="margin-top:10px" hidden></div>
+    <div class="tiles" id="stressTiles" style="margin-top:14px"></div>
+    <div class="grid2 wide" style="margin-top:16px">
+      <div><h3>Levier effectif après choc · actions × crédit</h3><div class="tbl" id="stressMx" style="margin-top:6px"></div>
+        <div class="legend"><span><i style="background:color-mix(in srgb,var(--good) 40%,transparent)"></i>marge couverte</span><span><i style="background:color-mix(in srgb,var(--warn) 50%,transparent)"></i>appel de marge</span><span><i style="background:color-mix(in srgb,var(--bad) 60%,transparent)"></i>NAV ≤ 0</span><span>Touchez une case pour l'appliquer.</span></div></div>
+      <div><h3>Par bucket de delta (scénario courant)</h3><div class="tbl" id="stressBk" style="margin-top:6px"></div></div>
+    </div>
+    <p class="note" style="margin-top:12px">Book arb couvert pondéré MCap, short δ initial × parité. <strong>Actions</strong> : parité choquée linéairement, delta ajusté par le gamma du fichier, prix CB par delta moyen. <strong>Crédit</strong> : Δprix = −(1 − δ) × duration × Δspread × prix, la part obligataire (1 − δ) portant le risque de spread ; delta supposé inchangé. Plancher à 50 % du prix initial. <strong>Levier effectif</strong> = MV après choc / NAV après P&amp;L. <strong>Appel de marge</strong> = marge grille exigée − NAV restante, en % de la NAV initiale ; <strong>ventes forcées</strong> = part du book à céder pour revenir dans la marge sans recapitaliser. Le scénario courant est suivi date par date dans le tableau « Évolution dans le temps ».</p>
+    <p class="note">À grille fixe, un choc crédit fait baisser la prime et donc la marge en % : le levier max de la grille remonte, mais la perte de NAV, amplifiée par le levier, domine. Le vrai mécanisme de crise est l'élargissement de la grille elle‑même : Mitchell &amp; Pulvino documentent des haircuts sur CB hedgées illiquides passés de 10–15 % à 50–75 % à l'automne 2008 (≈ ×4).</p>
   </div>
 </section>
 
@@ -261,29 +284,41 @@ function params(){ return {h:+$('#pH').value/100, u:+$('#pU').value/100, p:+$('#
 
 // ---------- per-row computation ----------
 // row: [issue,isin,region,sector,ccy,price,parity,prem,delta,mcap,gamma,mand]
-function compute(rows, prm, shock=0){
+// sc: {e: equity shock, c: spread widening (decimal), D: spread duration (yrs), k: haircut grid multiplier}
+function compute(rows, prm, sc={}){
+  const {e=0,c=0,D=0,k=1}=sc;
   return rows.map(r=>{
     let [issue,isin,region,sector,ccy,P0,par0,prem0,dlt,mcap,gamma,mand]=r;
     let d0=Math.min(Math.max(dlt/100,0),1), par=par0, P=P0, d=d0;
-    if(shock!==0){
-      par=par0*(1+shock);
-      d=Math.min(Math.max(d0+(gamma||0)/100*shock*100,0),1);
-      P=Math.max(P0+0.5*(d0+d)*par0*shock, 0.5*P0);
+    if(e!==0||c!==0){
+      par=par0*(1+e);
+      d=Math.min(Math.max(d0+(gamma||0)/100*e*100,0),1);
+      const Pe=P0+0.5*(d0+d)*par0*e;
+      P=Math.max(Pe-(1-d)*D*c*Pe, 0.5*P0);
     }
     const parc=Math.min(par,P), prem=Math.max(P-parc,0);
-    const mh=prm.h*d*parc, mu=prm.u*(1-d)*parc, mp=prm.p*prem;
-    const m=(mh+mu+mp)/P;
+    const mh=k*prm.h*d*parc, mu=k*prm.u*(1-d)*parc, mp=k*prm.p*prem;
+    const m=Math.min(1,(mh+mu+mp)/P);
     const mv=mcap*(P/P0);
+    const ret=(P-P0-d0*par0*e)/P0;   // hedged P&L on MV: CB move minus short δ0 × parity move
     const bk = dlt<30?'<30':dlt<60?'30-60':dlt<80?'60-80':'>80';
-    return {issue,isin,region,sector,ccy,price:P,parity:par,prem:prem0,delta:dlt,d,mcap:mv,mand,bk,mh:mh/P,mu:mu/P,mp:mp/P,m,lev:1/m,loan:mv*prm.hf*(1-m),marginUsd:mv*prm.hf*m};
+    return {issue,isin,region,sector,ccy,price:P,parity:par,prem:prem0,delta:dlt,d,mcap:mv,mcap0:mcap,ret,mand,bk,mh:mh/P,mu:mu/P,mp:mp/P,m,lev:1/m,loan:mv*prm.hf*(1-m),marginUsd:mv*prm.hf*m};
   });
 }
 function agg(rows){
   const W=rows.reduce((s,r)=>s+r.mcap,0);
   const w=k=>rows.reduce((s,r)=>s+r[k]*r.mcap,0)/W;
   const m=w('m');
-  return {n:rows.length,mcap:W,delta:w('d'),prem:w('prem'),m,lev:1/m,mh:w('mh'),mu:w('mu'),mp:w('mp'),marginUsd:rows.reduce((s,r)=>s+r.marginUsd,0),loan:rows.reduce((s,r)=>s+r.loan,0)};
+  const W0=rows.reduce((s,r)=>s+r.mcap0,0);
+  return {n:rows.length,mcap:W,mcap0:W0,ret:rows.reduce((s,r)=>s+r.ret*r.mcap0,0)/W0,delta:w('d'),prem:w('prem'),m,lev:1/m,mh:w('mh'),mu:w('mu'),mp:w('mp'),marginUsd:rows.reduce((s,r)=>s+r.marginUsd,0),loan:rows.reduce((s,r)=>s+r.loan,0)};
 }
+// Levered hedged book at L (MV/NAV), per 1 of initial MV.
+function book(A,L){
+  const nav=1/L+A.ret, g=A.mcap/A.mcap0, wiped=nav<=0;
+  return {nav,g,wiped,navLoss:-A.ret*L,lev:wiped?Infinity:g/nav,call:Math.max(0,A.m*g-nav)*L,sell:wiped?1:Math.max(0,1-nav/(A.m*g))};
+}
+function scen(){ return {e:+$('#shock').value/100,c:+$('#cshock').value/1e4,D:Math.max(0,+$('#sDur').value||0),k:+$('#gridK').value}; }
+function fundLev(){ return Math.max(1,+$('#fLev').value||1); }
 function groupBy(rows,key){ const g={}; rows.forEach(r=>{(g[r[key]]??=[]).push(r)}); return Object.entries(g).map(([k,v])=>({k,...agg(v)})); }
 
 // ---------- rendering ----------
@@ -332,24 +367,43 @@ function renderNames(){
   $('#names').innerHTML=`<thead><tr>${COLS.map(c=>`<th data-k="${c[0]}" class="${c[0]===sortKey?'on':''}">${c[1]}${c[0]===sortKey?(sortDir>0?' ↑':' ↓'):''}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr class="${r.lev>=12?'hi':r.lev<=4?'lo':''}"><td class="t" title="${r.isin}">${r.issue}</td><td class="t">${r.region}</td><td class="t">${r.sector}</td><td>${fmt(r.price,2)}</td><td>${fmt(r.parity,2)}</td><td>${fmt(r.prem,1)}</td><td>${fmt(r.delta,0)}</td><td>${fmt(r.mcap,0)}</td><td>${fmt(100*r.mh,1)}</td><td>${fmt(100*r.mu,1)}</td><td>${fmt(100*r.mp,1)}</td><td>${pct(r.m,1)}</td><td><span class="bar" style="width:${60*Math.min(r.lev,35)/maxLev}px"></span> ${fmt(r.lev,1)}x</td><td>${fmt(r.loan,0)}</td></tr>`).join('')}</tbody>`;
   $('#names').querySelectorAll('th').forEach(th=>th.onclick=()=>{const k=th.dataset.k; if(sortKey===k) sortDir*=-1; else {sortKey=k; sortDir=(k==='issue'||k==='region'||k==='sector')?1:-1;} renderNames();});
 }
+const MX_EQ=[-40,-30,-20,-10,0,10,20], MX_CR=[0,100,250,500,750,1000];
+const levTxt=b=>b.wiped?'NAV ≤ 0':fmt(b.lev,1)+'x';
 function renderStress(){
-  const s=sets[cur]; const prm=params(); const shock=+$('#shock').value/100;
-  $('#shockV').textContent=(shock>0?'+':'')+fmt(100*shock,0)+' %';
-  const B=agg(compute(s.rows,prm)), S=agg(compute(s.rows,prm,shock));
+  const s=sets[cur]; const prm=params(); const sc=scen(), L=fundLev();
+  $('#shockV').textContent=(sc.e>0?'+':sc.e<0?'−':'')+fmt(Math.abs(100*sc.e),0)+' %';
+  $('#cshockV').textContent='+'+fmt(1e4*sc.c,0)+' bp';
+  $('#gridKV').textContent='×'+sc.k.toLocaleString('fr-FR',{minimumFractionDigits:2});
+  const base=compute(s.rows,prm), shocked=compute(s.rows,prm,sc);
+  const B=agg(base), S=agg(shocked), b=book(S,L);
+  const w=$('#stressWarn'); w.hidden=L<=B.lev; w.textContent=`Levier du fonds (${fmt(L,1)}x) au‑dessus du levier max de la grille avant choc (${fmt(B.lev,1)}x) : le book est déjà en appel de marge.`;
   $('#stressTiles').innerHTML=[
-    tile('MV CB',pct(S.mcap/B.mcap-1,1),`${fmt(S.mcap/1e3,0)} $bn`),
-    tile('Delta moyen',fmt(100*S.delta,0),`vs ${fmt(100*B.delta,0)}`),
-    tile('Marge implicite',pct(S.m,1),`vs ${pct(B.m,1)}`),
-    tile('Levier max',fmt(S.lev,1)+'x',`vs ${fmt(B.lev,1)}x`),
-    tile('Marge $',`${fmt(S.marginUsd/1e3,0)} $bn`,`vs ${fmt(B.marginUsd/1e3,0)} — appel ≈ ${pct((S.m-B.m)*B.lev,1)} de NAV à ${fmt(B.lev,1)}x`),
+    tile('P&L book',pct(S.ret,1),`MV CB ${pct(S.mcap/B.mcap-1,1)} · hedge δ`),
+    tile('Perte de NAV',pct(b.navLoss,0),`à ${fmt(L,1)}x de levier`,true),
+    tile('Levier effectif',levTxt(b),`vs ${fmt(L,1)}x avant choc`,true),
+    tile('Levier max grille',fmt(S.lev,1)+'x',`vs ${fmt(B.lev,1)}x · marge ${pct(S.m,1)} vs ${pct(B.m,1)}`),
+    tile('Appel de marge',pct(b.call,0),'de la NAV initiale'),
+    tile('Ventes forcées',pct(b.sell,0),'du book, sans recapitalisation'),
   ].join('');
+  // actions × crédit matrix at current leverage, duration and grid
+  const cell=(e,c)=>{ const bb=book(agg(compute(s.rows,prm,{...sc,e:e/100,c:c/1e4})),L);
+    const cls=bb.wiped?'wipe':bb.call>0?'call':'ok', isCur=Math.round(100*sc.e)===e&&Math.round(1e4*sc.c)===c;
+    return `<td class="${cls}${isCur?' cur':''}" data-e="${e}" data-c="${c}">${levTxt(bb)}<span class="s">${bb.wiped?'wipe':bb.call>0?'appel '+pct(bb.call,0):'NAV −'+fmt(100*Math.max(0,bb.navLoss),0)+' %'}</span></td>`; };
+  $('#stressMx').innerHTML=`<table class="mx"><thead><tr><th>Actions \\ crédit</th>${MX_CR.map(c=>`<th>+${c} bp</th>`).join('')}</tr></thead><tbody>${MX_EQ.map(e=>`<tr><td>${e>0?'+':''}${e} %</td>${MX_CR.map(c=>cell(e,c)).join('')}</tr>`).join('')}</tbody></table>`;
+  $('#stressMx').querySelectorAll('td[data-e]').forEach(td=>td.onclick=()=>{ $('#shock').value=td.dataset.e; $('#cshock').value=td.dataset.c; renderStress(); renderTS(); });
+  // by delta bucket
+  const bo=['<30','30-60','60-80','>80'], gB=Object.fromEntries(groupBy(base,'bk').map(g=>[g.k,g]));
+  const gS=groupBy(shocked,'bk').sort((x,y)=>bo.indexOf(x.k)-bo.indexOf(y.k));
+  $('#stressBk').innerHTML=`<table><thead><tr><th>Delta</th><th>Poids</th><th>P&amp;L</th><th>Marge avant</th><th>Marge après</th><th>Lev. max après</th><th>Lev. effectif</th><th>Appel</th></tr></thead><tbody>${gS.map(g=>{const bb=book(g,L), g0=gB[g.k];
+    return `<tr><td class="t">δ ${g.k}</td><td>${pct(g.mcap0/B.mcap,0)}</td><td>${pct(g.ret,1)}</td><td>${pct(g0.m,1)}</td><td>${pct(g.m,1)}</td><td>${levPill(g.lev)}</td><td>${levTxt(bb)}</td><td>${pct(bb.call,0)}</td></tr>`;}).join('')}</tbody></table>`;
 }
 function renderTS(){
   const prm=params();
-  const pts=sets.map(s=>({date:s.date,...agg(compute(s.rows,prm))})).sort((a,b)=>a.date.localeCompare(b.date));
+  const sc=scen(), L=fundLev();
+  const pts=sets.map(s=>({date:s.date,...agg(compute(s.rows,prm)),st:book(agg(compute(s.rows,prm,sc)),L)})).sort((a,b)=>a.date.localeCompare(b.date));
   const multi=pts.length>=2;
   $('#tsEmpty').hidden=multi; $('#tsCharts').hidden=!multi;
-  $('#tsTable').innerHTML=`<table><thead><tr><th>Date</th><th>Noms</th><th>MCap $bn</th><th>δ</th><th>Prime</th><th>Marge</th><th>Levier max</th><th>Marge $bn</th><th>On loan $bn</th></tr></thead><tbody>${pts.map(p=>`<tr><td class="t">${p.date}</td><td>${p.n}</td><td>${fmt(p.mcap/1e3,0)}</td><td>${fmt(100*p.delta,0)}</td><td>${fmt(p.prem,0)} %</td><td>${pct(p.m,1)}</td><td>${fmt(p.lev,1)}x</td><td>${fmt(p.marginUsd/1e3,0)}</td><td>${fmt(p.loan/1e3,0)}</td></tr>`).join('')}</tbody></table>`;
+  $('#tsTable').innerHTML=`<table><thead><tr><th>Date</th><th>Noms</th><th>MCap $bn</th><th>δ</th><th>Prime</th><th>Marge</th><th>Levier max</th><th>Marge $bn</th><th>On loan $bn</th><th title="Scénario de stress courant">Lev. stressé</th><th title="Scénario de stress courant">Appel stress</th></tr></thead><tbody>${pts.map(p=>`<tr><td class="t">${p.date}</td><td>${p.n}</td><td>${fmt(p.mcap/1e3,0)}</td><td>${fmt(100*p.delta,0)}</td><td>${fmt(p.prem,0)} %</td><td>${pct(p.m,1)}</td><td>${fmt(p.lev,1)}x</td><td>${fmt(p.marginUsd/1e3,0)}</td><td>${fmt(p.loan/1e3,0)}</td><td>${levTxt(p.st)}</td><td>${pct(p.st.call,0)}</td></tr>`).join('')}</tbody></table>`;
   if(!multi) return;
   lineChart($('#c1'),pts,[{k:p=>100*p.m,label:'marge %',color:'var(--accent)'},{k:p=>p.lev,label:'levier max x',color:'var(--accent2)',right:true}]);
   lineChart($('#c2'),pts,[{k:p=>100*p.delta,label:'δ',color:'var(--accent2)'},{k:p=>p.prem,label:'prime %',color:'var(--prem)',right:true}]);
@@ -410,7 +464,7 @@ $('#file').onchange=e=>{ ingest([...e.target.files]); e.target.value=''; };
 $('#btnClear').onclick=()=>{ sets=[SEED]; cur=0; save(); $('#status').textContent='Jeux chargés retirés ; jeu d\'exemple du 29/09/2026 conservé.'; renderDates(); render(); };
 ['#pH','#pU','#pP','#pHF'].forEach(s=>$(s).addEventListener('input',render));
 ['#q','#fReg','#fBk','#fView'].forEach(s=>$(s).addEventListener('input',renderNames));
-$('#shock').addEventListener('input',renderStress);
+['#shock','#cshock','#gridK','#fLev','#sDur'].forEach(x=>$(x).addEventListener('input',()=>{renderStress();renderTS();}));
 
 sets=load()||[SEED]; if(!sets.some(s=>s.date===SEED.date)) sets.push(SEED); sets.sort((a,b)=>a.date.localeCompare(b.date)); cur=sets.length-1;
 renderDates(); render();
